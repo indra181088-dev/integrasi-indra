@@ -16,7 +16,36 @@
     <script>
       // Fungsi untuk memeriksa status pengguna
       function checkUserStatus() {
-        google.script.run
+        google.script.run<script>
+    // Ganti dengan URL Web App Anda!
+    var WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyI1bAjqgSU0NaRBHFmDLf50E0nUt6fCPyAs3bhgPC8YueY-C9MHXNv7z6dUxUz2XjSyA/exec'; 
+    
+    function checkUserStatus() {
+        fetch(WEB_APP_URL + '?action=getConfig')
+            .then(response => response.json())
+            .then(config => {
+                var statusDiv = document.getElementById('user-status');
+                if (config.isAdmin) {
+                    statusDiv.innerHTML = '✅ Login sebagai: <strong>' + config.userEmail + '</strong> (Admin)';
+                    statusDiv.style.color = 'green';
+                } else if (config.userEmail && config.userEmail !== 'Tidak terdeteksi') {
+                    statusDiv.innerHTML = '👤 Login sebagai: <strong>' + config.userEmail + '</strong> (Pengguna biasa)';
+                    statusDiv.style.color = 'blue';
+                } else {
+                    statusDiv.innerHTML = '⚠️ Belum login. Silakan login ke akun Google Anda.';
+                    statusDiv.style.color = 'red';
+                }
+            })
+            .catch(error => {
+                document.getElementById('user-status').innerHTML = '❌ Gagal terhubung ke server. Periksa koneksi.';
+                console.error('Error:', error);
+            });
+    }
+
+    window.onload = function() {
+        checkUserStatus();
+    };
+</script>
           .withSuccessHandler(function(config) {
             var statusDiv = document.getElementById('user-status');
             if (config.isAdmin) {
