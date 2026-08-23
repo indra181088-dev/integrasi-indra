@@ -1,0 +1,441 @@
+const CONFIG = Object.freeze({
+  DATA_SHEET: 'JOBS',
+  REGION_SHEET: 'Data Daerah Tangerang',
+  SETTINGS_SHEET: 'Config',
+  USERS_SHEET: 'Users',
+  SESSION_TTL_SECONDS: 21600, // 6 jam masa berlaku token sesi
+  HEADER_ROW: 1,
+  FIRST_DATA_ROW: 2,
+  DATA_COLUMNS: 15, // A:O
+  ID_COLUMN: 36,   // AJ, intentionally outside existing helper columns A:AI
+  ID_HEADER: 'APP_ID',
+  DATE_COLUMNS: [2, 3, 13, 14],
+  REQUIRED_FIELDS: ['noBerkas', 'tahun', 'kecamatan', 'desa', 'namaPemohon', 'jenisPermohonan', 'petugasUkur'],
+  DEFAULT_TITLE: 'Integrasi Mr. I_M'
+});
+
+const FIELDS = Object.freeze([
+  'no', 'tanggalTerimaBerkas', 'tanggalDikerjakan', 'noBerkas', 'tahun',
+  'kecamatan', 'desa', 'namaPemohon', 'jenisPermohonan', 'petugasUkur',
+  'pbt', 'nib', 'tanggalSelesai', 'tanggalTutupBerkas', 'keterangan'
+]);
+
+function doGet() {
+  return HtmlService.createTemplateFromFile('Index')
+    .evaluate()
+    .setTitle('MyJobs Pemetaan')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+/* ---------- Login & sesi ---------- */
+
+/** Bikin sheet "Users" bila belum ada, isi akun admin & user default. */
+function ensureUsersSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(CONFIG.USERS_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(CONFIG.USERS_SHEET);
+    sheet.getRange(1, 1, 3, 4).setValues([
+      ['Username', 'Password', 'Role', 'Nama'],
+      ['indra', 'balikjamempat', 'admin', 'Indra'],
+      ['petugas', 'ukur-tangerang25', 'user', 'Petugas Lapangan']
+    ]);
+    sheet.setFrozenRows(1);
+    sheet.setColumnWidths(1, 4, 200);
+  }
+  return sheet;
+}
+
+/** Cek username/password terhadap sheet "Users", kembalikan token sesi bila cocok. */
+function getSessionSecret_() {
+  const props = PropertiesService.getScriptProperties();
+  let secret = props.getProperty('SESSION_SECRET');
+  if (!secret) {
+    secret = Utilities.getUuid() + Utilities.getUuid();
+    props.setProperty('SESSION_SECRET', secret);
+  }
+  return secret;
+}
+
+function base64UrlEncode_(text) {
+  return Utilities.base64EncodeWebSafe(
+    Utilities.newBlob(String(text)).getBytes()
+  ).replace(/=+$/, '');
+}
+
+function base64UrlDecode_(text) {
+  const padded = String(text) + '==='.slice((String(text).length + 3) % 4);
+  return Utilities.newBlob(Utilities.base64DecodeWebSafe(padded)).getDataAsString();
+}
+
+function signSession_(payload) {
+  const signature = Utilities.computeHmacSha256Signature(
+    payload,
+    getSessionSecret_()
+  );
+  return Utilities.base64EncodeWebSafe(signature).replace(/=+$/, '');
+}
+
+function createSessionToken_(session) {
+  const payload = base64UrlEncode_(JSON.stringify({
+    ...session,
+    iat: Date.now()
+  }));
+  return payload + '.' + signSession_(payload);
+}
+
+function login(username, password) {
+  const sheet = ensureUsersSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) throw new Error('Belum ada akun terdaftar. Tambahkan di sheet "Users".');
+
+  const rows = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+  const u = String(username || '').trim();
+  const p = String(password || '');
+  const match = rows.find(r => String(r[0]).trim() === u && String(r[1]) === p);
+  if (!match) throw new Error('Username atau password salah.');
+
+  const session = {
+    username: String(match[0]),
+    role: String(match[2] || 'user').trim().toLowerCase(),
+    name: String(match[3] || match[0])
+  };
+
+  const token = createSessionToken_(session);
+  return Object.assign({ token: token }, session);
+}
+
+function logout(token) {
+  // Token bersifat stateless, jadi tidak ada cache session yang perlu dihapus.
+  // Client tetap menghapus token dari sessionStorage.
+  return { ok: true };
+}
+
+/** Pastikan token sesi valid dan belum melewati TTL. */
+function requireSession_(token) {
+  if (!token) throw new Error('Sesi berakhir, silakan login kembali.');
+
+  const parts = String(token).split('.');
+  if (parts.length !== 2) {
+    throw new Error('Sesi tidak valid, silakan login kembali.');
+  }
+
+  const payload = parts[0];
+  const signature = parts[1];
+  const expected = signSession_(payload);
+
+  if (signature !== expected) {
+    throw new Error('Sesi tidak valid, silakan login kembali.');
+  }
+
+  let session;
+  try {
+    session = JSON.parse(base64UrlDecode_(payload));
+  } catch (e) {
+    throw new Error('Sesi tidak valid, silakan login kembali.');
+  }
+
+  const issuedAt = Number(session.iat);
+  const maxAge = CONFIG.SESSION_TTL_SECONDS * 1000;
+
+  if (!Number.isFinite(issuedAt) || Date.now() - issuedAt > maxAge) {
+    throw new Error('Sesi berakhir, silakan login kembali.');
+  }
+
+  if (Date.now() - issuedAt < 0) {
+    throw new Error('Sesi tidak valid, silakan login kembali.');
+  }
+
+  return {
+    username: String(session.username || ''),
+    role: String(session.role || 'user').toLowerCase(),
+    name: String(session.name || session.username || '')
+  };
+}
+
+/** Jalankan satu kali setelah file Excel dikonversi menjadi Google Sheets. */
+function setupDatabase() {
+  ensureConfigSheet_(); // menjadikan orang yang menjalankan setupDatabase sebagai admin pertama
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+  try {
+    const sheet = getDataSheet_();
+    sheet.getRange(CONFIG.HEADER_ROW, CONFIG.ID_COLUMN).setValue(CONFIG.ID_HEADER);
+    const lastRow = sheet.getLastRow();
+    if (lastRow < CONFIG.FIRST_DATA_ROW) return { initialized: 0 };
+
+    const count = lastRow - CONFIG.FIRST_DATA_ROW + 1;
+    const data = sheet.getRange(CONFIG.FIRST_DATA_ROW, 1, count, CONFIG.DATA_COLUMNS).getValues();
+    const ids = sheet.getRange(CONFIG.FIRST_DATA_ROW, CONFIG.ID_COLUMN, count, 1).getValues();
+    let initialized = 0;
+    for (let i = 0; i < count; i++) {
+      // Abaikan baris template yang hanya memiliki NO/TAHUN tetapi belum berisi pekerjaan.
+      const isRealRecord = [1, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+        .some(index => data[i][index] !== '' && data[i][index] !== null);
+      if (isRealRecord && !ids[i][0]) {
+        ids[i][0] = Utilities.getUuid();
+        initialized++;
+      }
+    }
+    sheet.getRange(CONFIG.FIRST_DATA_ROW, CONFIG.ID_COLUMN, count, 1).setValues(ids);
+    sheet.hideColumns(CONFIG.ID_COLUMN);
+    return { initialized: initialized };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getInitialData(token) {
+  requireSession_(token);
+  ensureInitialized_();
+  return {
+    records: getRecords_(),
+    regions: getRegions_(),
+    updatedAt: new Date().toISOString(),
+    config: buildConfigResponse_()
+  };
+}
+
+/** Judul & logo saat ini, plus apakah pengguna yang sedang login adalah admin. */
+function getConfig() {
+  return buildConfigResponse_();
+}
+
+/** Hanya user dengan role admin (lihat sheet "Users") yang boleh mengubah judul/logo. */
+function updateConfig(token, payload) {
+  const session = requireSession_(token);
+  if (session.role !== 'admin') {
+    throw new Error('Hanya admin yang dapat mengubah judul dan logo.');
+  }
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+  try {
+    const sheet = ensureConfigSheet_();
+    const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
+    rows.forEach((row, i) => {
+      const key = String(row[0]).trim();
+      if (key === 'title') sheet.getRange(i + 2, 2).setValue(sanitize_(payload && payload.title) || CONFIG.DEFAULT_TITLE);
+      if (key === 'logoUrl') sheet.getRange(i + 2, 2).setValue(sanitize_(payload && payload.logoUrl));
+    });
+    return buildConfigResponse_();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function saveRecord(token, payload) {
+  requireSession_(token);
+  validatePayload_(payload);
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+  try {
+    const sheet = getDataSheet_();
+    ensureIdHeader_(sheet);
+    const values = payloadToRow_(payload);
+
+    if (payload.id) {
+      const rowNumber = findRowById_(sheet, payload.id);
+      if (!rowNumber) throw new Error('Data tidak ditemukan atau sudah dihapus pengguna lain.');
+      values[0] = sheet.getRange(rowNumber, 1).getValue() || nextNumber_(sheet);
+      sheet.getRange(rowNumber, 1, 1, CONFIG.DATA_COLUMNS).setValues([values]);
+      return { action: 'updated', id: payload.id };
+    }
+
+    const rowNumber = findAppendRow_(sheet);
+    const id = Utilities.getUuid();
+    values[0] = nextNumber_(sheet);
+    sheet.getRange(rowNumber, 1, 1, CONFIG.DATA_COLUMNS).setValues([values]);
+    sheet.getRange(rowNumber, CONFIG.ID_COLUMN).setValue(id);
+    return { action: 'created', id: id };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteRecord(token, id) {
+  requireSession_(token);
+  if (!id) throw new Error('ID data tidak valid.');
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+  try {
+    const sheet = getDataSheet_();
+    const rowNumber = findRowById_(sheet, id);
+    if (!rowNumber) throw new Error('Data tidak ditemukan atau sudah dihapus.');
+    // Kosongkan hanya kolom aplikasi; jangan menggeser kolom bantu/formula pada sheet.
+    sheet.getRange(rowNumber, 1, 1, CONFIG.DATA_COLUMNS).clearContent();
+    sheet.getRange(rowNumber, CONFIG.ID_COLUMN).clearContent();
+    return { action: 'deleted', id: id };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getRecords_() {
+  const sheet = getDataSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < CONFIG.FIRST_DATA_ROW) return [];
+  const count = lastRow - CONFIG.FIRST_DATA_ROW + 1;
+  const values = sheet.getRange(CONFIG.FIRST_DATA_ROW, 1, count, CONFIG.DATA_COLUMNS).getValues();
+  const ids = sheet.getRange(CONFIG.FIRST_DATA_ROW, CONFIG.ID_COLUMN, count, 1).getValues();
+  return values.reduce((records, row, index) => {
+    if (!ids[index][0]) return records;
+    const record = { id: ids[index][0] };
+    FIELDS.forEach((field, columnIndex) => {
+      const value = row[columnIndex];
+      record[field] = CONFIG.DATE_COLUMNS.includes(columnIndex + 1)
+        ? toIsoDate_(value)
+        : (value === null ? '' : value);
+    });
+    records.push(record);
+    return records;
+  }, []);
+}
+
+function getRegions_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(CONFIG.REGION_SHEET);
+  if (!sheet || sheet.getLastRow() < 2) return {};
+  const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getDisplayValues();
+  return values.reduce((map, row) => {
+    const kecamatan = normalize_(row[0]);
+    const desa = normalize_(row[1]);
+    if (!kecamatan || !desa) return map;
+    if (!map[kecamatan]) map[kecamatan] = [];
+    if (!map[kecamatan].includes(desa)) map[kecamatan].push(desa);
+    return map;
+  }, {});
+}
+
+function payloadToRow_(payload) {
+  return [
+    '', parseDate_(payload.tanggalTerimaBerkas), parseDate_(payload.tanggalDikerjakan),
+    sanitize_(payload.noBerkas), Number(payload.tahun), normalize_(payload.kecamatan),
+    normalize_(payload.desa), sanitize_(payload.namaPemohon), normalize_(payload.jenisPermohonan),
+    normalize_(payload.petugasUkur), sanitize_(payload.pbt), sanitize_(payload.nib),
+    parseDate_(payload.tanggalSelesai), parseDate_(payload.tanggalTutupBerkas),
+    sanitize_(payload.keterangan)
+  ];
+}
+
+function validatePayload_(payload) {
+  if (!payload || typeof payload !== 'object') throw new Error('Data formulir tidak valid.');
+  CONFIG.REQUIRED_FIELDS.forEach(field => {
+    if (payload[field] === undefined || String(payload[field]).trim() === '') {
+      throw new Error('Kolom wajib belum lengkap: ' + field);
+    }
+  });
+  const year = Number(payload.tahun);
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) throw new Error('Tahun tidak valid.');
+}
+
+function findRowById_(sheet, id) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < CONFIG.FIRST_DATA_ROW) return 0;
+  const finder = sheet.getRange(CONFIG.FIRST_DATA_ROW, CONFIG.ID_COLUMN, lastRow - 1, 1)
+    .createTextFinder(String(id)).matchEntireCell(true).findNext();
+  return finder ? finder.getRow() : 0;
+}
+
+function findAppendRow_(sheet) {
+  const lastRow = Math.max(sheet.getLastRow(), CONFIG.FIRST_DATA_ROW - 1);
+  if (lastRow < CONFIG.FIRST_DATA_ROW) return CONFIG.FIRST_DATA_ROW;
+  const count = lastRow - CONFIG.FIRST_DATA_ROW + 1;
+  const data = sheet.getRange(CONFIG.FIRST_DATA_ROW, 1, count, CONFIG.DATA_COLUMNS).getValues();
+  const ids = sheet.getRange(CONFIG.FIRST_DATA_ROW, CONFIG.ID_COLUMN, count, 1).getValues();
+  for (let i = 0; i < count; i++) {
+    const hasRecordContent = [1, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+      .some(index => data[i][index] !== '' && data[i][index] !== null);
+    if (!hasRecordContent && !ids[i][0]) return CONFIG.FIRST_DATA_ROW + i;
+  }
+  return lastRow + 1;
+}
+
+function nextNumber_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < CONFIG.FIRST_DATA_ROW) return 1;
+  const count = lastRow - CONFIG.FIRST_DATA_ROW + 1;
+  const values = sheet.getRange(CONFIG.FIRST_DATA_ROW, 1, count, 1).getValues().flat();
+  const ids = sheet.getRange(CONFIG.FIRST_DATA_ROW, CONFIG.ID_COLUMN, count, 1).getValues().flat();
+  return values.reduce((max, value, index) => ids[index] ? Math.max(max, Number(value) || 0) : max, 0) + 1;
+}
+
+function ensureInitialized_() {
+  const sheet = getDataSheet_();
+  if (sheet.getRange(CONFIG.HEADER_ROW, CONFIG.ID_COLUMN).getValue() !== CONFIG.ID_HEADER) {
+    setupDatabase();
+  }
+}
+
+function ensureIdHeader_(sheet) {
+  if (sheet.getRange(CONFIG.HEADER_ROW, CONFIG.ID_COLUMN).getValue() !== CONFIG.ID_HEADER) {
+    sheet.getRange(CONFIG.HEADER_ROW, CONFIG.ID_COLUMN).setValue(CONFIG.ID_HEADER);
+  }
+}
+
+function getDataSheet_() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.DATA_SHEET);
+  if (!sheet) throw new Error('Sheet "' + CONFIG.DATA_SHEET + '" tidak ditemukan.');
+  return sheet;
+}
+
+function parseDate_(value) {
+  if (!value) return '';
+  const parts = String(value).split('-').map(Number);
+  if (parts.length !== 3) throw new Error('Format tanggal harus YYYY-MM-DD.');
+  return new Date(parts[0], parts[1] - 1, parts[2]);
+}
+
+function toIsoDate_(value) {
+  if (!value) return '';
+  if (Object.prototype.toString.call(value) !== '[object Date]') return String(value);
+  return Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+function sanitize_(value) {
+  const text = value === undefined || value === null ? '' : String(value).trim();
+  // Mencegah formula injection dari input web.
+  return /^[=+@]/.test(text) ? "'" + text : text;
+}
+
+function normalize_(value) {
+  return sanitize_(value).toUpperCase();
+}
+
+/* ---------- Config (judul, logo, daftar admin) ---------- */
+
+function buildConfigResponse_() {
+  const cfg = readConfig_();
+  return {
+    title: cfg.title || CONFIG.DEFAULT_TITLE,
+    logoUrl: cfg.logoUrl || ''
+  };
+}
+
+function readConfig_() {
+  const sheet = ensureConfigSheet_();
+  const lastRow = sheet.getLastRow();
+  const rows = lastRow > 1 ? sheet.getRange(2, 1, lastRow - 1, 2).getValues() : [];
+  const map = {};
+  rows.forEach(row => { if (row[0]) map[String(row[0]).trim()] = row[1]; });
+  const adminEmails = String(map.adminEmails || '')
+    .split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+  return { title: String(map.title || ''), logoUrl: String(map.logoUrl || ''), adminEmails: adminEmails };
+}
+
+/** Membuat sheet "Config" bila belum ada, dan menjadikan orang yang menjalankan ini sebagai admin pertama. */
+function ensureConfigSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(CONFIG.SETTINGS_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(CONFIG.SETTINGS_SHEET);
+    sheet.getRange(1, 1, 4, 3).setValues([
+      ['Key', 'Value', 'Keterangan'],
+      ['title', CONFIG.DEFAULT_TITLE, 'Judul yang tampil di header aplikasi. Hanya admin yang bisa mengubah lewat aplikasi.'],
+      ['logoUrl', '', 'URL gambar logo (harus bisa diakses publik). Kosongkan untuk memakai lambang bawaan.'],
+      ['adminEmails', getActiveEmail_(), 'Daftar email admin, dipisah koma. Tambah/hapus admin dengan mengedit sel ini langsung di sheet.']
+    ]);
+    sheet.setFrozenRows(1);
+    sheet.setColumnWidths(1, 3, 220);
+  }
+  return sheet;
+}

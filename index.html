@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<title>Integrasi Mr. I_M — Manajemen Berkas Ukur</title>
+<style>
+  :root{
+    --ink:#10233F; --paper:#EEF3FA; --surface:#FFFFFF;
+    --pine:#155EEF; --pine-ink:#0B2F6B; --pine-soft:#E5EEFF;
+    --brass:#2F80ED; --brass-soft:#E8F1FF;
+    --brick:#C4324B; --brick-soft:#FDE9ED;
+    --line:#D6E0EE; --line-strong:#B8C7DC; --muted:#5D6F89;
+    --shadow:0 1px 2px rgba(8,27,58,.05), 0 16px 36px -16px rgba(8,27,58,.24);
+    --radius:10px;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:
+      linear-gradient(var(--paper),var(--paper)) ,
+      repeating-linear-gradient(0deg, rgba(21,94,239,.045) 0 1px, transparent 1px 32px),
+      repeating-linear-gradient(90deg, rgba(21,94,239,.045) 0 1px, transparent 1px 32px);
+    color:var(--ink); font-family:'IBM Plex Sans',Arial,sans-serif; font-size:14px; line-height:1.45;
+  }
+  .mono{font-family:'IBM Plex Mono',ui-monospace,monospace}
+  .disp{font-family:'Space Grotesk',sans-serif}
+  *:focus-visible{outline:2px solid var(--pine); outline-offset:2px}
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:.001ms !important; transition-duration:.001ms !important} }
+
+  /* ---------- title-block header ---------- */
+  header{background:linear-gradient(115deg,#071B36,#0B2F5B 65%,#104A83); border-bottom:3px solid #2F80ED; color:#F7FAFF; box-shadow:0 10px 28px rgba(3,18,39,.2)}
+  .titleblock{max-width:1400px; margin:0 auto; padding:16px 24px; display:grid; grid-template-columns:auto 1fr auto; gap:18px; align-items:center}
+  .mark{width:46px; height:46px; border:1px solid rgba(255,255,255,.45); border-radius:8px; display:grid; place-items:center; background:#155EEF; flex:none; box-shadow:0 8px 22px rgba(0,0,0,.2)}
+  .mark svg{width:26px;height:26px}
+  .tb-title h1{margin:0; font-size:20px; letter-spacing:.02em; font-weight:700}
+  .tb-title .sub{color:#BFD0E7; font-size:12px; margin-top:2px}
+  .tb-meta{display:flex; gap:18px; text-align:right}
+  .tb-meta .item{border-left:1px solid rgba(255,255,255,.2); padding-left:14px}
+  .tb-meta .lbl{font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:#A9BFDC}
+  .tb-meta .val{font-family:'IBM Plex Mono',monospace; font-size:13px; font-weight:600; margin-top:2px}
+  @media(max-width:760px){ .titleblock{grid-template-columns:auto 1fr; row-gap:10px} .tb-meta{display:none} }
+
+  main.page{max-width:1400px; margin:0 auto; padding:22px 24px 56px}
+
+  /* ---------- corner-bracket card ---------- */
+  .frame{position:relative; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow)}
+  .frame::before,.frame::after{content:'';position:absolute; width:10px; height:10px; border:2px solid var(--pine); opacity:.55}
+  .frame::before{top:-1px; left:-1px; border-right:0; border-bottom:0}
+  .frame::after{bottom:-1px; right:-1px; border-left:0; border-top:0}
+
+  /* ---------- dashboard ---------- */
+  .dash-head{display:flex; align-items:baseline; justify-content:space-between; margin:26px 0 12px}
+  .dash-head h2{font-size:13px; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); margin:0; font-weight:600}
+  .stats{display:grid; grid-template-columns:repeat(4,minmax(140px,1fr)); gap:12px; margin-bottom:14px}
+  .stat{padding:16px}
+  .stat .stat-label{color:var(--muted); font-size:11.5px; text-transform:uppercase; letter-spacing:.05em}
+  .stat .stat-value{font-family:'Space Grotesk',sans-serif; font-size:28px; font-weight:700; margin-top:6px; color:var(--pine-ink)}
+  .stat .stat-note{color:var(--muted); font-size:11px; margin-top:3px}
+  .charts{display:grid; grid-template-columns:1fr 1.3fr 1.3fr; gap:12px; margin-bottom:6px}
+  .chart-card{padding:16px}
+  .chart-card h3{margin:0 0 12px; font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:600}
+  .donut-wrap{display:flex; align-items:center; gap:16px}
+  .legend{display:flex; flex-direction:column; gap:7px; font-size:12px}
+  .legend .row{display:flex; align-items:center; gap:7px}
+  .legend .sw{width:10px; height:10px; border-radius:2px; flex:none}
+  .legend .n{margin-left:auto; font-family:'IBM Plex Mono',monospace; font-weight:600}
+  .barlist{display:flex; flex-direction:column; gap:9px}
+  .barlist .row{display:grid; grid-template-columns:88px 1fr 30px; gap:8px; align-items:center; font-size:12px}
+  .barlist .name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink)}
+  .barlist .track{background:var(--pine-soft); border-radius:4px; height:9px; overflow:hidden}
+  .barlist .fill{background:var(--pine); height:100%; border-radius:4px}
+  .barlist .val{font-family:'IBM Plex Mono',monospace; text-align:right; color:var(--muted)}
+  @media(max-width:980px){ .stats{grid-template-columns:1fr 1fr} .charts{grid-template-columns:1fr} }
+
+  /* ---------- petugas report ---------- */
+  .mini-table{min-width:0 !important}
+  .mini-table td,.mini-table th{white-space:nowrap}
+  .progress-cell{display:flex; align-items:center; gap:8px}
+  .progress-track{background:var(--pine-soft); border-radius:4px; height:8px; width:110px; overflow:hidden; flex:none}
+  .progress-track .fill{background:var(--pine); height:100%; border-radius:4px}
+  .progress-pct{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted)}
+
+  /* ---------- stacked workload chart ---------- */
+  .workload-card{padding:18px; margin-bottom:6px}
+  .workload-head{display:flex; justify-content:space-between; align-items:flex-start; gap:18px; margin-bottom:16px}
+  .workload-head h3{margin:0; font-size:13px; text-transform:uppercase; letter-spacing:.07em; color:var(--pine-ink)}
+  .workload-head p{margin:4px 0 0; color:var(--muted); font-size:12px}
+  .workload-legend{display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--muted)}
+  .workload-legend span{display:flex; align-items:center; gap:6px}
+  .workload-legend i{width:9px; height:9px; border-radius:2px}
+  .workload-chart{display:flex; flex-direction:column; gap:11px}
+  .workload-row{display:grid; grid-template-columns:160px 1fr 42px; gap:10px; align-items:center}
+  .workload-name{font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .workload-track{height:16px; background:#EDF2F8; border-radius:4px; overflow:hidden}
+  .workload-stack{display:flex; height:100%; min-width:3px; overflow:hidden; border-radius:4px}
+  .workload-segment{height:100%; min-width:0}
+  .workload-segment.proses{background:#D58A18}.workload-segment.selesai{background:#155EEF}.workload-segment.tutup{background:#0B2F5B}
+  .workload-total{font-family:'IBM Plex Mono',monospace; font-size:12px; text-align:right; color:var(--muted)}
+  @media(max-width:620px){.workload-head{display:block}.workload-legend{margin-top:10px}.workload-row{grid-template-columns:100px 1fr 34px}}
+
+  /* ---------- toolbar ---------- */
+  .toolbar{display:grid; grid-template-columns:minmax(240px,1fr) 170px 150px auto auto; gap:9px; margin:20px 0 10px}
+  input,select,textarea,button{font:inherit; color:var(--ink)}
+  input,select,textarea{width:100%; border:1px solid var(--line-strong); background:var(--surface); border-radius:8px; padding:10px 12px; outline:none}
+  input:focus,select:focus,textarea:focus{border-color:var(--pine); box-shadow:0 0 0 3px var(--pine-soft)}
+  textarea{resize:vertical; min-height:72px}
+  .search{position:relative}
+  .search input{padding-left:36px}
+  .search svg{position:absolute; left:11px; top:11px; opacity:.5}
+  .kbd{position:absolute; right:9px; top:8px; font-size:10px; color:var(--muted); border:1px solid var(--line-strong); border-radius:4px; padding:2px 5px; background:var(--paper)}
+  button{border:0; border-radius:8px; padding:10px 15px; font-weight:600; cursor:pointer; white-space:nowrap; transition:transform .08s ease}
+  button:active{transform:scale(.97)}
+  .primary{background:var(--pine); color:#fff}
+  .primary:hover{background:var(--pine-ink)}
+  .secondary{background:var(--surface); border:1px solid var(--line-strong); color:var(--ink)}
+  .secondary:hover{background:var(--paper)}
+  .danger{color:var(--brick); background:var(--brick-soft)}
+  .ghost{background:transparent; border:1px dashed var(--line-strong); color:var(--muted)}
+  .icon-btn{padding:7px 10px; font-size:12px}
+  @media(max-width:900px){ .toolbar{grid-template-columns:1fr 1fr} .search{grid-column:span 2} }
+  @media(max-width:560px){ .toolbar{grid-template-columns:1fr 1fr} }
+
+  .chips{display:flex; flex-wrap:wrap; gap:7px; margin-bottom:14px; min-height:1px}
+  .chip{display:inline-flex; align-items:center; gap:6px; background:var(--brass-soft); color:#174A8B; border-radius:20px; padding:5px 6px 5px 12px; font-size:12px}
+  .chip button{background:none; padding:2px; border-radius:50%; color:#174A8B; line-height:0}
+  .chip button:hover{background:rgba(0,0,0,.08)}
+
+  /* ---------- data section ---------- */
+  .data-card{overflow:hidden}
+  .table-meta{padding:12px 16px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; color:var(--muted); font-size:12px}
+  .table-wrap{overflow:auto; max-height:66vh}
+  table{border-collapse:separate; border-spacing:0; width:100%; min-width:1350px}
+  th,td{text-align:left; padding:10px 12px; border-bottom:1px solid #E5ECF5; vertical-align:top}
+  th{position:sticky; top:0; background:#0B2F5B; z-index:2; color:#D7E5F7; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; white-space:nowrap; cursor:pointer; user-select:none}
+  th:hover{color:#FFFFFF}
+  th .arrow{opacity:.5; margin-left:3px}
+  th.sorted .arrow{opacity:1; color:var(--pine)}
+  td{font-size:12.5px}
+  td.mono{font-family:'IBM Plex Mono',monospace}
+  .nowrap{white-space:nowrap}
+  .truncate{max-width:210px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .actions{display:flex; gap:6px; position:sticky; right:0; background:var(--surface); box-shadow:-8px 0 12px rgba(255,255,255,.92)}
+  th.actions{background:#0B2F5B}
+  .empty{text-align:center; padding:56px 20px !important; color:var(--muted)}
+  .empty svg{opacity:.35; margin-bottom:10px}
+
+  .stamp{display:inline-flex; align-items:center; gap:5px; border-radius:5px; padding:3px 9px; font-size:10.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; transform:rotate(-1deg); border:1.5px solid currentColor}
+  .stamp.proses{color:var(--brass); background:var(--brass-soft)}
+  .stamp.selesai{color:var(--pine); background:var(--pine-soft)}
+  .stamp.tutup{color:var(--pine-ink); background:var(--pine-soft); border-style:double}
+  .badge{display:inline-flex; background:var(--paper); border:1px solid var(--line-strong); color:var(--ink); border-radius:5px; padding:3px 8px; font-size:11px}
+
+  /* mobile card list */
+  .card-list{display:none; flex-direction:column}
+  .rec-card{border-bottom:1px solid var(--line); padding:14px 16px}
+  .rec-card:last-child{border-bottom:0}
+  .rec-top{display:flex; justify-content:space-between; gap:10px; align-items:flex-start}
+  .rec-top .no-berkas{font-family:'IBM Plex Mono',monospace; font-weight:700}
+  .rec-grid{display:grid; grid-template-columns:1fr 1fr; gap:6px 12px; margin-top:10px; font-size:12px}
+  .rec-grid .l{color:var(--muted); font-size:10.5px; text-transform:uppercase; letter-spacing:.04em}
+  .rec-actions{display:flex; gap:8px; margin-top:12px}
+  .rec-actions button{flex:1}
+  @media(max-width:760px){ .table-wrap{display:none} .card-list{display:flex} }
+
+  /* ---------- modal ---------- */
+  .modal-backdrop{display:none; position:fixed; inset:0; background:rgba(3,18,39,.7); backdrop-filter:blur(3px); z-index:30; padding:20px; overflow:auto}
+  .modal-backdrop.open{display:flex; align-items:flex-start; justify-content:center}
+  .modal{position:relative; width:min(900px,100%); background:var(--surface); border-radius:12px; margin:auto; box-shadow:0 30px 70px rgba(0,0,0,.28); border:1px solid var(--line)}
+  .modal::before,.modal::after{content:'';position:absolute; width:12px; height:12px; border:2px solid var(--brass); opacity:.7}
+  .modal::before{top:-1px; left:-1px; border-right:0; border-bottom:0}
+  .modal::after{bottom:-1px; right:-1px; border-left:0; border-top:0}
+  .modal-head,.modal-foot{padding:16px 22px; display:flex; justify-content:space-between; align-items:center}
+  .modal-head{border-bottom:1px solid var(--line)}
+  .modal-head h2{font-size:16px; margin:0; font-family:'Space Grotesk',sans-serif}
+  .modal-foot{border-top:1px solid var(--line); justify-content:flex-end; gap:8px}
+  .modal-body{padding:20px 22px}
+  .section-lbl{font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--brass); font-weight:700; margin:18px 0 10px}
+  .section-lbl:first-child{margin-top:0}
+  .grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px}
+  .field.span2{grid-column:span 2}
+  .field.span3{grid-column:span 3}
+  label{display:block; font-size:12px; font-weight:600; color:#233C5E; margin-bottom:6px}
+  .req:after{content:' *'; color:var(--brick)}
+  @media(max-width:760px){ .grid3{grid-template-columns:1fr 1fr} .field.span3{grid-column:span 2} }
+  @media(max-width:520px){ .grid3{grid-template-columns:1fr} .field.span2,.field.span3{grid-column:span 1} }
+
+  .toast{position:fixed; right:20px; bottom:20px; z-index:50; background:var(--ink); color:#fff; border-radius:9px; padding:13px 18px; box-shadow:var(--shadow); display:none; max-width:380px; font-size:13px}
+  .toast.show{display:block; animation:rise .18s ease}
+  .toast.error{background:var(--brick)}
+  @keyframes rise{from{transform:translateY(8px);opacity:0} to{transform:translateY(0);opacity:1}}
+
+  .loading{display:none; position:fixed; inset:0; background:rgba(238,243,250,.82); z-index:60; place-items:center}
+  .loading.show{display:grid}
+  .spinner{width:34px; height:34px; border:3px solid var(--pine-soft); border-top-color:var(--pine); border-radius:50%; animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---------- login ---------- */
+  #appRoot{display:none}
+  .login-screen{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;
+    background:
+      radial-gradient(circle at 18% 18%,rgba(47,128,237,.32),transparent 30%),
+      linear-gradient(135deg,#06162E,#0A2B53 58%,#104A83);}
+  .login-card{width:min(360px,100%); padding:32px 28px; text-align:center; border-color:rgba(255,255,255,.22); box-shadow:0 28px 80px rgba(0,0,0,.32)}
+  .login-mark{width:52px; height:52px; border:1px solid #8BB7F0; border-radius:10px; background:linear-gradient(145deg,#155EEF,#2F80ED); display:grid; place-items:center; margin:0 auto 14px; box-shadow:0 12px 28px rgba(21,94,239,.3)}
+  .login-mark svg{width:28px; height:28px}
+  .login-card h1{margin:0 0 4px; font-size:20px; font-family:'Space Grotesk',sans-serif}
+  .login-sub{color:var(--muted); font-size:12.5px; margin:0 0 22px}
+  .login-card .field{text-align:left; margin-bottom:14px}
+  .login-error{color:var(--brick); background:var(--brick-soft); border-radius:6px; padding:8px 10px; font-size:12px; margin-top:6px; text-align:left}
+
+  .skel{background:linear-gradient(90deg,#E7EDF6 25%,#F6F9FD 37%,#E7EDF6 63%); background-size:400% 100%; animation:shimmer 1.3s ease infinite; border-radius:5px}
+
+  /* Midnight navy refinements */
+  header .secondary{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.3);color:#F7FAFF}
+  header .secondary:hover{background:rgba(255,255,255,.16)}
+  .stat{border-top:3px solid #155EEF}
+  .stat:nth-child(2){border-top-color:#2F80ED}.stat:nth-child(3){border-top-color:#5B8DEF}.stat:nth-child(4){border-top-color:#0B2F6B}
+  .chart-card{border-top:2px solid #D8E6FA}
+  tbody tr:nth-child(even) td{background:#F8FAFD}
+  tbody tr:hover td{background:#EDF4FF}
+  @keyframes shimmer{0%{background-position:100% 0}100%{background-position:0 0}}
+</style>
+</head>
+<body>
+
+<div class="login-screen" id="loginScreen">
+  <div class="frame login-card">
+    <div class="login-mark"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2v13" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M6 22l6-7 6 7" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="4" r="2" fill="#fff"/></svg></div>
+    <h1>Integrasi Mr. I_M</h1>
+    <div class="login-sub">Masuk untuk mengakses data berkas ukur</div>
+    <form id="loginForm">
+      <div class="field"><label class="req">Username</label><input id="loginUsername" required autocomplete="username"></div>
+      <div class="field"><label class="req">Password</label><input id="loginPassword" type="password" required autocomplete="current-password"></div>
+      <button type="submit" class="primary" style="width:100%">Masuk</button>
+      <div class="login-error" id="loginError" style="display:none"></div>
+    </form>
+  </div>
+</div>
+
+<div id="appRoot">
+<header>
+  <div class="titleblock">
+    <div class="mark" id="brandMark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 2v13" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M6 22l6-7 6 7" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="4" r="2" fill="#fff"/></svg>
+    </div>
+    <div class="tb-title">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <h1 id="appTitle">PATOK</h1>
+        <button class="secondary icon-btn" id="adminSettingsBtn" style="display:none" onclick="openSettings()" title="Hanya admin: ubah judul & logo">⚙ Judul &amp; Logo</button>
+        <button class="secondary icon-btn" onclick="logout()" title="Keluar dari akun">⎋ Keluar</button>
+      </div>
+      <div class="sub">Sistem Manajemen Berkas Ukur — Kantor Pertanahan Kab. Tangerang</div>
+    </div>
+    <div class="tb-meta">
+      <div class="item"><div class="lbl">Login sebagai</div><div class="val" id="userMeta">—</div></div>
+      <div class="item"><div class="lbl">Total berkas</div><div class="val" id="metaTotal">—</div></div>
+      <div class="item"><div class="lbl">Diperbarui</div><div class="val" id="metaUpdated">—</div></div>
+    </div>
+  </div>
+</header>
+
+<main class="page">
+
+  <div class="dash-head"><h2>Ringkasan</h2></div>
+  <section class="stats">
+    <div class="frame stat"><div class="stat-label">Total data</div><div class="stat-value" id="statTotal">0</div><div class="stat-note">sesuai filter aktif</div></div>
+    <div class="frame stat"><div class="stat-label">Sudah selesai</div><div class="stat-value" id="statDone">0</div><div class="stat-note">memiliki tanggal selesai</div></div>
+    <div class="frame stat"><div class="stat-label">Proses</div><div class="stat-value" id="statProses">0</div><div class="stat-note">belum ada tanggal selesai</div></div>
+    <div class="frame stat"><div class="stat-label">Berkas ditutup</div><div class="stat-value" id="statClosed">0</div><div class="stat-note">memiliki tanggal tutup berkas</div></div>
+  </section>
+
+  <section class="charts">
+    <div class="frame chart-card">
+      <h3>Status berkas</h3>
+      <div class="donut-wrap">
+        <svg id="donutChart" width="108" height="108" viewBox="0 0 108 108"></svg>
+        <div class="legend" id="donutLegend"></div>
+      </div>
+    </div>
+    <div class="frame chart-card">
+      <h3>Kecamatan terbanyak</h3>
+      <div class="barlist" id="barKecamatan"></div>
+    </div>
+    <div class="frame chart-card">
+      <h3>Jenis permohonan terbanyak</h3>
+      <div class="barlist" id="barJenis"></div>
+    </div>
+  </section>
+
+  <div class="dash-head"><h2>Progres per petugas ukur</h2></div>
+  <section class="frame data-card" style="margin-bottom:6px">
+    <div class="table-wrap" style="max-height:340px">
+      <table class="mini-table">
+        <thead><tr>
+          <th>Petugas ukur</th><th>Total</th><th>Proses</th><th>Selesai</th><th>Ditutup</th><th>Progres</th>
+        </tr></thead>
+        <tbody id="petugasReportBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="frame workload-card">
+    <div class="workload-head">
+      <div><h3>Beban kerja per petugas</h3><p>Total dan komposisi status berkas sesuai filter aktif</p></div>
+      <div class="workload-legend"><span><i style="background:#D58A18"></i>Proses</span><span><i style="background:#155EEF"></i>Selesai</span><span><i style="background:#0B2F5B"></i>Ditutup</span></div>
+    </div>
+    <div id="workloadChart" class="workload-chart"></div>
+  </section>
+
+  <div class="dash-head"><h2>Data berkas</h2></div>
+  <section class="toolbar">
+    <div class="search">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input id="searchInput" placeholder="Cari no. berkas, pemohon, desa, petugas, NIB..." autocomplete="off">
+      <span class="kbd">/</span>
+    </div>
+    <select id="filterKecamatan"><option value="">Semua kecamatan</option></select>
+    <select id="filterStatus">
+      <option value="">Semua status</option>
+      <option value="proses">Proses</option>
+      <option value="selesai">Selesai</option>
+      <option value="tutup">Ditutup</option>
+    </select>
+    <button class="secondary" id="exportBtn" title="Unduh CSV sesuai filter">⇩ Ekspor</button>
+    <button class="primary" onclick="openCreate()">+ Tambah data</button>
+  </section>
+  <div class="chips" id="chips"></div>
+
+  <section class="frame data-card">
+    <div class="table-meta"><span id="resultInfo">Memuat data...</span><span id="hintSort" class="mono">klik kolom untuk urutkan</span></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr id="theadRow"></tr></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <div class="card-list" id="cardList"></div>
+  </section>
+</main>
+
+<div class="modal-backdrop" id="formModal" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-head"><h2 id="modalTitle">Tambah Data</h2><button class="secondary icon-btn" onclick="closeModal()">✕</button></div>
+    <form id="recordForm">
+      <div class="modal-body">
+        <input type="hidden" id="recordId">
+
+        <div class="section-lbl">Identitas berkas</div>
+        <div class="grid3">
+          <div class="field"><label class="req">No. berkas</label><input id="noBerkas" required maxlength="80"></div>
+          <div class="field"><label class="req">Tahun</label><input type="number" id="tahun" min="2000" max="2100" required></div>
+          <div class="field"><label class="req">Jenis permohonan</label><input id="jenisPermohonan" list="jenisList" required maxlength="100"><datalist id="jenisList"></datalist></div>
+        </div>
+
+        <div class="section-lbl">Lokasi</div>
+        <div class="grid3">
+          <div class="field"><label class="req">Kecamatan</label><select id="kecamatan" required></select></div>
+          <div class="field"><label class="req">Desa</label><select id="desa" required><option value="">Pilih desa</option></select></div>
+          <div class="field"><label class="req">Nama pemohon</label><input id="namaPemohon" required maxlength="200"></div>
+        </div>
+
+        <div class="section-lbl">Petugas &amp; dokumen</div>
+        <div class="grid3">
+          <div class="field"><label class="req">Petugas ukur</label><input id="petugasUkur" list="petugasList" required maxlength="100"><datalist id="petugasList"></datalist></div>
+          <div class="field"><label>PBT</label><input id="pbt" maxlength="80"></div>
+          <div class="field"><label>NIB</label><input id="nib" maxlength="80"></div>
+        </div>
+
+        <div class="section-lbl">Tanggal</div>
+        <div class="grid3">
+          <div class="field"><label>Terima berkas</label><input type="date" id="tanggalTerimaBerkas"></div>
+          <div class="field"><label>Dikerjakan</label><input type="date" id="tanggalDikerjakan"></div>
+          <div class="field"><label>Selesai</label><input type="date" id="tanggalSelesai"></div>
+          <div class="field"><label>Tutup berkas</label><input type="date" id="tanggalTutupBerkas"></div>
+          <div class="field span2"><label>Keterangan</label><textarea id="keterangan" maxlength="1000"></textarea></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="secondary" onclick="closeModal()">Batal</button>
+        <button type="submit" class="primary">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="settingsModal" role="dialog" aria-modal="true">
+  <div class="modal" style="width:min(480px,100%)">
+    <div class="modal-head"><h2>Judul &amp; Logo</h2><button class="secondary icon-btn" onclick="closeSettings()">✕</button></div>
+    <form id="settingsForm">
+      <div class="modal-body">
+        <div class="field" style="margin-bottom:14px"><label class="req">Judul aplikasi</label><input id="settingsTitle" maxlength="60" required></div>
+        <div class="field"><label>URL logo</label><input id="settingsLogoUrl" type="url" placeholder="https://... (kosongkan untuk lambang bawaan)" maxlength="500"></div>
+        <div style="color:var(--muted);font-size:11.5px;margin-top:10px">Hanya admin yang dapat mengubah judul dan logo. Data berkas tetap bisa diedit bersama seperti biasa. Untuk menambah/menghapus admin, edit sel <code>adminEmails</code> di sheet "Config" langsung.</div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="secondary" onclick="closeSettings()">Batal</button>
+        <button type="submit" class="primary">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+</div>
+
+<div class="loading" id="loading"><div class="spinner"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const COLUMNS = [
+  {key:'no', label:'No', mono:true, nowrap:true},
+  {key:'tanggalTerimaBerkas', label:'Terima', date:true, nowrap:true},
+  {key:'tanggalDikerjakan', label:'Dikerjakan', date:true, nowrap:true},
+  {key:'noBerkas', label:'No Berkas', mono:true, strong:true},
+  {key:'tahun', label:'Tahun'},
+  {key:'kecamatan', label:'Kecamatan'},
+  {key:'desa', label:'Desa'},
+  {key:'namaPemohon', label:'Pemohon', truncate:true},
+  {key:'jenisPermohonan', label:'Jenis'},
+  {key:'petugasUkur', label:'Petugas'},
+  {key:'pbt', label:'PBT', mono:true},
+  {key:'nib', label:'NIB', mono:true},
+  {key:'tanggalSelesai', label:'Selesai', date:true, nowrap:true},
+  {key:'tanggalTutupBerkas', label:'Tutup', date:true, nowrap:true},
+  {key:'keterangan', label:'Keterangan', truncate:true}
+];
+const FORM_FIELDS = ['tanggalTerimaBerkas','tanggalDikerjakan','noBerkas','tahun','kecamatan','desa','namaPemohon','jenisPermohonan','petugasUkur','pbt','nib','tanggalSelesai','tanggalTutupBerkas','keterangan'];
+
+const state = { records:[], filtered:[], regions:{}, updatedAt:null, sortKey:'no', sortDir:-1, config:{title:'Integrasi Mr. I_M',logoUrl:''}, token:null, role:null, userName:null };
+const $ = id => document.getElementById(id);
+
+function restoreSession(){
+  const saved = sessionStorage.getItem('patokSession');
+
+  if (!saved) {
+    $('loginScreen').style.display = 'flex';
+    $('appRoot').style.display = 'none';
+    return;
+  }
+
+  try {
+    const session = JSON.parse(saved);
+
+    if (!session.token) {
+      sessionStorage.removeItem('patokSession');
+      $('loginScreen').style.display = 'flex';
+      return;
+    }
+
+    state.token = session.token;
+    state.role = session.role;
+    state.userName = session.name;
+
+    $('loginScreen').style.display = 'none';
+    $('appRoot').style.display = 'block';
+
+    $('adminSettingsBtn').style.display =
+      state.role === 'admin' ? 'inline-flex' : 'none';
+
+    $('userMeta').textContent =
+      state.userName || state.role;
+
+    loadData();
+
+  } catch(e) {
+    sessionStorage.removeItem('patokSession');
+    $('loginScreen').style.display = 'flex';
+    $('appRoot').style.display = 'none';
+  }
+}
+const DEFAULT_MARK_SVG = '<svg viewBox="0 0 24 24" fill="none"><path d="M12 2v13" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M6 22l6-7 6 7" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="4" r="2" fill="#fff"/></svg>';
+
+document.addEventListener('DOMContentLoaded', () => {
+  buildHeaderRow();
+  bindEvents();
+  restoreSession();
+});
+
+function buildHeaderRow(){
+  const tr = $('theadRow');
+  tr.innerHTML = COLUMNS.map(c => `<th data-key="${c.key}">${c.label} <span class="arrow">↕</span></th>`).join('') + '<th class="actions">Aksi</th>';
+  tr.querySelectorAll('th[data-key]').forEach(th => th.addEventListener('click', () => setSort(th.dataset.key)));
+}
+
+function bindEvents(){
+  $('loginForm').addEventListener('submit', submitLogin);
+  $('searchInput').addEventListener('input', applyFilters);
+  $('filterKecamatan').addEventListener('change', applyFilters);
+  $('filterStatus').addEventListener('change', applyFilters);
+  $('kecamatan').addEventListener('change', () => fillDesa($('kecamatan').value, ''));
+  $('recordForm').addEventListener('submit', submitForm);
+  $('formModal').addEventListener('click', e => { if (e.target === $('formModal')) closeModal(); });
+  $('settingsForm').addEventListener('submit', submitSettings);
+  $('settingsModal').addEventListener('click', e => { if (e.target === $('settingsModal')) closeSettings(); });
+  $('exportBtn').addEventListener('click', exportCsv);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeModal();
+    if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') { e.preventDefault(); $('searchInput').focus(); }
+    if ((e.key === 'n' || e.key === 'N') && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA' && !$('formModal').classList.contains('open')) openCreate();
+  });
+}
+
+/* ---------- login ---------- */
+function submitLogin(e){
+  e.preventDefault();
+  $('loginError').style.display = 'none';
+  const username = $('loginUsername').value.trim();
+  const password = $('loginPassword').value;
+  setLoading(true);
+  google.script.run.withSuccessHandler(session => {
+    setLoading(false);
+    state.token = session.token;
+state.role = session.role;
+state.userName = session.name;
+
+// Simpan sesi agar tidak kembali ke login saat reload
+sessionStorage.setItem('patokSession', JSON.stringify({
+  token: session.token,
+  role: session.role,
+  name: session.name
+}));
+
+$('loginScreen').style.display = 'none';
+    $('appRoot').style.display = 'block';
+    $('adminSettingsBtn').style.display = state.role === 'admin' ? 'inline-flex' : 'none';
+    $('userMeta').textContent = state.userName || state.role;
+    loadData();
+  }).withFailureHandler(err => {
+    setLoading(false);
+    $('loginError').textContent = err && err.message ? err.message : String(err);
+    $('loginError').style.display = 'block';
+  }).login(username, password);
+}
+
+function showLogin(msg){
+  state.token = null; state.role = null; state.userName = null;
+  $('appRoot').style.display = 'none';
+  $('loginScreen').style.display = 'flex';
+  $('loginForm').reset();
+  if (msg){ $('loginError').textContent = msg; $('loginError').style.display = 'block'; }
+  $('loginUsername').focus();
+}
+
+function logout(){
+  const token = state.token;
+
+  sessionStorage.removeItem('patokSession');
+
+  showLogin();
+
+  if (token) {
+    google.script.run.logout(token);
+  }
+}
+
+function loadData(){
+  setLoading(true); renderSkeleton();
+  google.script.run.withSuccessHandler(data => {
+    state.records = data.records || [];
+    state.regions = data.regions || {};
+    state.updatedAt = data.updatedAt;
+    hydrateFilters();
+    applyFilters();
+    applyConfig(data.config || state.config);
+    $('metaTotal').textContent = state.records.length;
+    $('metaUpdated').textContent = formatDateTime(data.updatedAt);
+    setLoading(false);
+  }).withFailureHandler(err => {
+    setLoading(false);
+    const msg = err && err.message ? err.message : String(err);
+    if (/[Ss]esi/.test(msg)) { showLogin(msg); } else { handleError(err); }
+  }).getInitialData(state.token);
+}
+
+/* ---------- judul & logo (admin) ---------- */
+function applyConfig(cfg){
+  state.config = cfg;
+  $('appTitle').textContent = cfg.title || 'Integrasi Mr. I_M';
+document.title = (cfg.title || 'Integrasi Mr. I_M') + ' — Manajemen Berkas Ukur';
+  $('brandMark').innerHTML = cfg.logoUrl
+    ? `<img src="${attr(cfg.logoUrl)}" alt="Logo" style="width:100%;height:100%;object-fit:contain;border-radius:4px" onerror="this.parentElement.innerHTML=DEFAULT_MARK_SVG">`
+    : DEFAULT_MARK_SVG;
+  $('adminSettingsBtn').style.display = state.role === 'admin' ? 'inline-flex' : 'none';
+}
+
+function openSettings(){
+  $('settingsTitle').value = state.config.title || 'Integrasi Mr. I_M';
+  $('settingsLogoUrl').value = state.config.logoUrl || '';
+  $('settingsModal').classList.add('open');
+}
+function closeSettings(){ $('settingsModal').classList.remove('open'); }
+
+function submitSettings(e){
+  e.preventDefault();
+  const payload = { title: $('settingsTitle').value.trim(), logoUrl: $('settingsLogoUrl').value.trim() };
+  setLoading(true);
+  google.script.run.withSuccessHandler(cfg => {
+    applyConfig(cfg); closeSettings(); setLoading(false);
+    toast('Judul & logo berhasil diperbarui.');
+  }).withFailureHandler(handleError).updateConfig(state.token, payload);
+}
+
+function hydrateFilters(){
+  const ks = Object.keys(state.regions).sort();
+  $('filterKecamatan').innerHTML = '<option value="">Semua kecamatan</option>' + ks.map(k => `<option>${esc(k)}</option>`).join('');
+  $('kecamatan').innerHTML = '<option value="">Pilih kecamatan</option>' + ks.map(k => `<option>${esc(k)}</option>`).join('');
+  $('jenisList').innerHTML = unique(state.records.map(r => r.jenisPermohonan)).map(v => `<option value="${attr(v)}">`).join('');
+  $('petugasList').innerHTML = unique(state.records.map(r => r.petugasUkur)).map(v => `<option value="${attr(v)}">`).join('');
+}
+
+function recordStatus(r){
+  if (r.tanggalTutupBerkas) return 'tutup';
+  if (r.tanggalSelesai) return 'selesai';
+  return 'proses';
+}
+
+function applyFilters(){
+  const q = $('searchInput').value.trim().toLowerCase();
+  const k = $('filterKecamatan').value;
+  const s = $('filterStatus').value;
+  state.filtered = state.records.filter(r => {
+    const hay = Object.values(r).join(' ').toLowerCase();
+    return (!q || hay.includes(q)) && (!k || r.kecamatan === k) && (!s || recordStatus(r) === s);
+  });
+  sortFiltered();
+  renderChips(q, k, s);
+  renderTable();
+  renderCards();
+  renderStats();
+  renderCharts();
+  renderPetugasReport();
+  renderWorkloadChart();
+}
+
+function sortFiltered(){
+  const { sortKey, sortDir } = state;
+  state.filtered.sort((a,b) => {
+    let va = a[sortKey] ?? '', vb = b[sortKey] ?? '';
+    const na = Number(va), nb = Number(vb);
+    if (!isNaN(na) && !isNaN(nb) && va !== '' && vb !== '') { va = na; vb = nb; }
+    if (va < vb) return -1 * sortDir;
+    if (va > vb) return 1 * sortDir;
+    return 0;
+  });
+}
+
+function setSort(key){
+  if (state.sortKey === key) state.sortDir *= -1; else { state.sortKey = key; state.sortDir = 1; }
+  document.querySelectorAll('#theadRow th').forEach(th => {
+    th.classList.toggle('sorted', th.dataset.key === key);
+    const arrow = th.querySelector('.arrow');
+    if (arrow) arrow.textContent = th.dataset.key === key ? (state.sortDir === 1 ? '↑' : '↓') : '↕';
+  });
+  sortFiltered(); renderTable(); renderCards();
+}
+
+function renderChips(q,k,s){
+  const chips = [];
+  if (q) chips.push({label:`Cari: "${q}"`, clear:() => { $('searchInput').value=''; applyFilters(); }});
+  if (k) chips.push({label:`Kecamatan: ${k}`, clear:() => { $('filterKecamatan').value=''; applyFilters(); }});
+  if (s) chips.push({label:`Status: ${s}`, clear:() => { $('filterStatus').value=''; applyFilters(); }});
+  const box = $('chips');
+  box.innerHTML = '';
+  chips.forEach((c,i) => {
+    const el = document.createElement('span');
+    el.className = 'chip';
+    el.innerHTML = `${esc(c.label)} <button aria-label="Hapus filter">✕</button>`;
+    el.querySelector('button').addEventListener('click', c.clear);
+    box.appendChild(el);
+  });
+}
+
+function statusStamp(r){
+  const st = recordStatus(r);
+  if (st === 'tutup') return `<span class="stamp tutup">Ditutup</span>`;
+  if (st === 'selesai') return `<span class="stamp selesai">Selesai</span>`;
+  return `<span class="stamp proses">Proses</span>`;
+}
+
+function cellValue(r,c){
+  if (c.date) return fmtDate(r[c.key]);
+  return esc(r[c.key]);
+}
+
+function renderTable(){
+  const body = $('tableBody');
+  $('resultInfo').textContent = `Menampilkan ${state.filtered.length} dari ${state.records.length} data`;
+  if (!state.filtered.length){
+    body.innerHTML = `<tr><td colspan="${COLUMNS.length+1}" class="empty">Tidak ada data yang cocok dengan filter saat ini.</td></tr>`;
+    return;
+  }
+  body.innerHTML = state.filtered.map(r => {
+    const cells = COLUMNS.map(c => {
+      let content = cellValue(r,c);
+      if (c.key === 'noBerkas') content = `<strong>${content}</strong>`;
+      if (c.key === 'jenisPermohonan') content = `<span class="badge">${content}</span>`;
+      if (c.key === 'tanggalSelesai' || c.key === 'tanggalTutupBerkas') content = r[c.key] ? content : (c.key==='tanggalSelesai' ? statusStamp(r) : '<span class="mono" style="color:var(--muted)">—</span>');
+      const cls = [c.nowrap?'nowrap':'', c.truncate?'truncate':'', c.mono?'mono':''].filter(Boolean).join(' ');
+      const title = c.truncate ? ` title="${attr(r[c.key])}"` : '';
+      return `<td class="${cls}"${title}>${content}</td>`;
+    }).join('');
+    return `<tr>${cells}<td class="actions"><button class="secondary icon-btn" onclick="openEdit('${attr(r.id)}')">Edit</button><button class="danger icon-btn" onclick="removeRecord('${attr(r.id)}','${attr(r.noBerkas)}')">Hapus</button></td></tr>`;
+  }).join('');
+}
+
+function renderCards(){
+  const box = $('cardList');
+  if (!state.filtered.length){ box.innerHTML = `<div class="empty">Tidak ada data yang cocok dengan filter saat ini.</div>`; return; }
+  box.innerHTML = state.filtered.map(r => `
+    <div class="rec-card">
+      <div class="rec-top">
+        <div><div class="no-berkas mono">${esc(r.noBerkas)}</div><div style="color:var(--muted);font-size:11.5px;margin-top:2px">${esc(r.jenisPermohonan)}</div></div>
+        ${statusStamp(r)}
+      </div>
+      <div class="rec-grid">
+        <div><div class="l">Pemohon</div>${esc(r.namaPemohon)}</div>
+        <div><div class="l">Petugas</div>${esc(r.petugasUkur)}</div>
+        <div><div class="l">Kecamatan</div>${esc(r.kecamatan)}</div>
+        <div><div class="l">Desa</div>${esc(r.desa)}</div>
+        <div><div class="l">Terima</div><span class="mono">${fmtDate(r.tanggalTerimaBerkas)||'—'}</span></div>
+        <div><div class="l">Selesai</div><span class="mono">${fmtDate(r.tanggalSelesai)||'—'}</span></div>
+      </div>
+      <div class="rec-actions">
+        <button class="secondary icon-btn" onclick="openEdit('${attr(r.id)}')">Edit</button>
+        <button class="danger icon-btn" onclick="removeRecord('${attr(r.id)}','${attr(r.noBerkas)}')">Hapus</button>
+      </div>
+    </div>`).join('');
+}
+
+function renderStats(){
+  const rows = state.filtered;
+  const done = rows.filter(r => r.tanggalSelesai).length;
+  const closed = rows.filter(r => r.tanggalTutupBerkas).length;
+  const proses = rows.filter(r => recordStatus(r) === 'proses').length;
+  $('statTotal').textContent = rows.length;
+  $('statDone').textContent = done;
+  $('statProses').textContent = proses;
+  $('statClosed').textContent = closed;
+}
+
+function renderSkeleton(){
+  $('tableBody').innerHTML = Array.from({length:6}).map(() =>
+    `<tr>${COLUMNS.map(()=>'<td><div class="skel" style="height:12px;width:80%"></div></td>').join('')}<td class="actions"></td></tr>`
+  ).join('');
+}
+
+/* ---------- charts (pure inline SVG, no dependency) ---------- */
+function renderCharts(){
+  renderDonut();
+  renderBar('barKecamatan', countBy(state.filtered, 'kecamatan'));
+  renderBar('barJenis', countBy(state.filtered, 'jenisPermohonan'));
+}
+
+function countBy(rows, key){
+  const map = {};
+  rows.forEach(r => { const v = r[key] || 'Tidak diketahui'; map[v] = (map[v]||0)+1; });
+  return Object.entries(map).sort((a,b) => b[1]-a[1]).slice(0,5);
+}
+
+function renderDonut(){
+  const rows = state.filtered;
+  const counts = { proses:0, selesai:0, tutup:0 };
+  rows.forEach(r => counts[recordStatus(r)]++);
+  const total = rows.length || 1;
+  const colors = { proses:'#D58A18', selesai:'#155EEF', tutup:'#0B2F5B' };
+  const labels = { proses:'Proses', selesai:'Selesai', tutup:'Ditutup' };
+  const r = 42, cx = 54, cy = 54, circumference = 2*Math.PI*r;
+  let offset = 0;
+  const segs = Object.keys(counts).map(key => {
+    const frac = counts[key]/total;
+    const len = frac*circumference;
+    const seg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colors[key]}" stroke-width="14" stroke-dasharray="${len} ${circumference-len}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})"/>`;
+    offset += len;
+    return seg;
+  }).join('');
+  $('donutChart').innerHTML = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#E3EAF4" stroke-width="14"/>${segs}<text x="${cx}" y="${cy-2}" text-anchor="middle" font-family="Space Grotesk" font-size="20" font-weight="700" fill="#10233F">${rows.length}</text><text x="${cx}" y="${cy+14}" text-anchor="middle" font-family="IBM Plex Sans" font-size="9" fill="#5D6F89">berkas</text>`;
+  $('donutLegend').innerHTML = Object.keys(counts).map(key =>
+    `<div class="row"><span class="sw" style="background:${colors[key]}"></span>${labels[key]}<span class="n">${counts[key]}</span></div>`
+  ).join('');
+}
+
+function renderBar(elId, entries){
+  const box = $(elId);
+  if (!entries.length){ box.innerHTML = `<div style="color:var(--muted);font-size:12px">Tidak ada data.</div>`; return; }
+  const max = entries[0][1];
+  box.innerHTML = entries.map(([name,count]) => `
+    <div class="row">
+      <div class="name" title="${attr(name)}">${esc(name)}</div>
+      <div class="track"><div class="fill" style="width:${Math.max(6,(count/max)*100)}%"></div></div>
+      <div class="val">${count}</div>
+    </div>`).join('');
+}
+
+/* ---------- laporan progres per petugas ukur ---------- */
+function renderPetugasReport(){
+  const box = $('petugasReportBody');
+  const rows = state.filtered;
+  const map = {};
+  rows.forEach(r => {
+    const key = r.petugasUkur || 'Tidak diketahui';
+    if (!map[key]) map[key] = { total:0, proses:0, selesai:0, tutup:0 };
+    map[key].total++;
+    map[key][recordStatus(r)]++;
+  });
+  const entries = Object.entries(map).sort((a,b) => b[1].total - a[1].total);
+  if (!entries.length){
+    box.innerHTML = `<tr><td colspan="6" class="empty">Tidak ada data yang cocok dengan filter saat ini.</td></tr>`;
+    return;
+  }
+  box.innerHTML = entries.map(([name, s]) => {
+    const pct = s.total ? Math.round(((s.selesai + s.tutup) / s.total) * 100) : 0;
+    return `<tr>
+      <td><strong>${esc(name)}</strong></td>
+      <td class="mono">${s.total}</td>
+      <td class="mono">${s.proses}</td>
+      <td class="mono">${s.selesai}</td>
+      <td class="mono">${s.tutup}</td>
+      <td>
+        <div class="progress-cell">
+          <div class="progress-track"><div class="fill" style="width:${pct}%"></div></div>
+          <span class="progress-pct">${pct}%</span>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderWorkloadChart(){
+  const box = $('workloadChart');
+  const map = {};
+  state.filtered.forEach(r => {
+    const key = r.petugasUkur || 'Tidak diketahui';
+    if (!map[key]) map[key] = { total:0, proses:0, selesai:0, tutup:0 };
+    map[key].total++;
+    map[key][recordStatus(r)]++;
+  });
+  const entries = Object.entries(map).sort((a,b) => b[1].total-a[1].total).slice(0,10);
+  if (!entries.length){
+    box.innerHTML = `<div class="empty">Tidak ada data yang cocok dengan filter saat ini.</div>`;
+    return;
+  }
+  const maxTotal = entries[0][1].total;
+  box.innerHTML = entries.map(([name,s]) => {
+    const barWidth = (s.total/maxTotal)*100;
+    const prosesWidth = (s.proses/s.total)*100;
+    const selesaiWidth = (s.selesai/s.total)*100;
+    const tutupWidth = (s.tutup/s.total)*100;
+    const detail = `Proses ${s.proses} · Selesai ${s.selesai} · Ditutup ${s.tutup}`;
+    return `<div class="workload-row">
+      <div class="workload-name" title="${attr(name)}">${esc(name)}</div>
+      <div class="workload-track" title="${attr(detail)}"><div class="workload-stack" style="width:${barWidth}%">
+        <div class="workload-segment proses" style="width:${prosesWidth}%"></div>
+        <div class="workload-segment selesai" style="width:${selesaiWidth}%"></div>
+        <div class="workload-segment tutup" style="width:${tutupWidth}%"></div>
+      </div></div>
+      <div class="workload-total">${s.total}</div>
+    </div>`;
+  }).join('');
+}
+
+/* ---------- CRUD ---------- */
+function openCreate(){
+  $('recordForm').reset(); $('recordId').value=''; $('modalTitle').textContent='Tambah Data';
+  $('tahun').value = new Date().getFullYear();
+  fillDesa('', '');
+  $('formModal').classList.add('open');
+  setTimeout(() => $('noBerkas').focus(), 50);
+}
+
+function openEdit(id){
+  const r = state.records.find(x => x.id === id);
+  if (!r) return toast('Data tidak ditemukan.', true);
+  $('recordForm').reset(); $('recordId').value = r.id; $('modalTitle').textContent = 'Edit Data — ' + r.noBerkas;
+  FORM_FIELDS.forEach(k => $(k).value = r[k] ?? '');
+  fillDesa(r.kecamatan, r.desa);
+  $('formModal').classList.add('open');
+}
+
+function fillDesa(kecamatan, selected){
+  const values = state.regions[kecamatan] || [];
+  $('desa').innerHTML = '<option value="">Pilih desa</option>' + values.sort().map(v => `<option ${v===selected?'selected':''}>${esc(v)}</option>`).join('');
+  if (selected && !values.includes(selected)) $('desa').insertAdjacentHTML('beforeend', `<option selected>${esc(selected)}</option>`);
+}
+
+function submitForm(e){
+  e.preventDefault();
+  const payload = { id: $('recordId').value };
+  FORM_FIELDS.forEach(k => payload[k] = $(k).value);
+  setLoading(true);
+  google.script.run.withSuccessHandler(() => {
+    closeModal();
+    toast(payload.id ? 'Data berhasil diperbarui.' : 'Data berhasil ditambahkan.');
+    loadData();
+  }).withFailureHandler(handleError).saveRecord(state.token, payload);
+}
+
+function removeRecord(id, noBerkas){
+  if (!confirm(`Hapus data berkas ${noBerkas}?\nTindakan ini tidak dapat dibatalkan.`)) return;
+  setLoading(true);
+  google.script.run.withSuccessHandler(() => { toast('Data berhasil dihapus.'); loadData(); })
+    .withFailureHandler(handleError).deleteRecord(state.token, id);
+}
+
+function closeModal(){ $('formModal').classList.remove('open'); }
+
+/* ---------- export ---------- */
+function exportCsv(){
+  if (!state.filtered.length) return toast('Tidak ada data untuk diekspor.', true);
+  const headers = COLUMNS.map(c => c.label);
+  const lines = [headers.join(',')];
+  state.filtered.forEach(r => {
+    const row = COLUMNS.map(c => csvEscape(r[c.key] ?? ''));
+    lines.push(row.join(','));
+  });
+  const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `integrasi-mr-i_m-berkas-${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast(`${state.filtered.length} baris diekspor ke CSV.`);
+}
+function csvEscape(v){ const s = String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s; }
+
+/* ---------- helpers ---------- */
+function handleError(err){ setLoading(false); toast(err && err.message ? err.message : String(err), true); }
+function setLoading(v){ $('loading').classList.toggle('show', v); }
+function toast(msg, error=false){
+  const t = $('toast'); t.textContent = msg; t.className = 'toast show' + (error?' error':'');
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.className = 'toast', 3500);
+}
+function unique(a){ return [...new Set(a.filter(Boolean))].sort(); }
+function fmtDate(v){ if (!v) return ''; const p = String(v).split('-'); return p.length===3 ? `${p[2]}/${p[1]}/${p[0]}` : esc(v); }
+function formatDateTime(v){ return v ? new Date(v).toLocaleString('id-ID') : '—'; }
+function esc(v){ return String(v??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function attr(v){ return esc(v); }
+</script>
+</body>
+</html>
