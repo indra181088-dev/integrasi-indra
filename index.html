@@ -4,43 +4,45 @@
     <base target="_top">
     <title>Integrasi Mr. I_M</title>
     <style>
-      body { font-family: Arial, sans-serif; padding: 20px; }
-      #user-info { padding: 15px; background: #f0f0f0; border-radius: 8px; margin-bottom: 20px; font-size: 16px; }
+      body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+      #user-info { padding: 15px; background: white; border-radius: 8px; margin-bottom: 20px; font-size: 16px; border: 1px solid #ddd; }
       #admin-features { display: none; padding: 15px; background: #d4edda; border-radius: 8px; margin-bottom: 20px; border: 1px solid #c3e6cb; }
-      .loading { color: #856404; background-color: #fff3cd; padding: 15px; border-radius: 8px; }
-      .error { color: #721c24; background-color: #f8d7da; padding: 15px; border-radius: 8px; }
-      .success { color: #155724; background-color: #d4edda; padding: 15px; border-radius: 8px; }
+      .container { max-width: 800px; margin: 0 auto; }
+      h1 { color: #333; }
     </style>
   </head>
   <body>
-    <h1>Integrasi Mr. I_M</h1>
-    
-    <div id="user-info">
-      <span id="user-status">⏳ Memeriksa akses...</span>
-    </div>
-    
-    <div id="admin-features">
-      ✅ <strong>Fitur Admin</strong> - Anda memiliki akses penuh!
-    </div>
+    <div class="container">
+      <h1>📋 Integrasi Mr. I_M</h1>
+      
+      <div id="user-info">
+        <span id="user-status">⏳ Memeriksa akses...</span>
+      </div>
+      
+      <div id="admin-features">
+        ✅ <strong>Fitur Admin Aktif</strong> - Anda memiliki akses penuh!
+      </div>
 
-    <!-- Konten dashboard lainnya -->
-    <div style="padding: 20px; background: #e9ecef; border-radius: 8px;">
-      <p>📊 <strong>Dashboard Sistem Manajemen Berkas Ukur</strong></p>
-      <p>Silakan login dengan akun Google untuk mengakses data.</p>
+      <div style="padding: 20px; background: white; border-radius: 8px; border: 1px solid #ddd;">
+        <p><strong>📊 Sistem Manajemen Berkas Ukur</strong></p>
+        <p>Kantor Pertanahan Kab. Tangerang</p>
+        <hr>
+        <p style="color: #666; font-size: 14px;">Silakan login dengan akun Google untuk mengakses data.</p>
+      </div>
     </div>
 
     <script>
       // 🔴 GANTI URL INI DENGAN URL WEB APP ANDA!
-      var WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxXlVXNncBpAV9R8pzbzHfFAg1k3GjJ4S3XJ39gldr_1H8JmFBHbCgVD7uJ-K9y3DoOSA/exec';
+      var WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxSDT-Mq4jXwtIx_BjDCRraxEiLhq03sO40D2OZ9ab7olWeb-jYVyzz-H7jV-IH6k5fDw/exec';
 
       function checkUserStatus() {
         var statusDiv = document.getElementById('user-status');
-        statusDiv.innerHTML = '⏳ Memeriksa akses ke server...';
+        statusDiv.innerHTML = '⏳ Menghubungi server...';
         statusDiv.style.color = '#856404';
         
         console.log('📡 Mengirim request ke:', WEB_APP_URL + '?action=getConfig');
         
-        // Gunakan fetch() untuk memanggil Google Apps Script
+        // PAKAI FETCH, BUKAN google.script.run!
         fetch(WEB_APP_URL + '?action=getConfig')
           .then(function(response) {
             console.log('📥 Response status:', response.status);
@@ -50,23 +52,23 @@
             return response.json();
           })
           .then(function(config) {
-            console.log('✅ Config diterima:', config);
+            console.log('✅ Config dari server:', config);
             
             if (config.isAdmin) {
-              statusDiv.innerHTML = '✅ <strong>Login sebagai:</strong> ' + config.userEmail + ' (Admin)';
+              statusDiv.innerHTML = '✅ Login sebagai: <strong>' + config.userEmail + '</strong> (Admin)';
               statusDiv.style.color = '#155724';
               document.getElementById('admin-features').style.display = 'block';
             } else if (config.userEmail && config.userEmail !== 'Tidak terdeteksi') {
-              statusDiv.innerHTML = '👤 <strong>Login sebagai:</strong> ' + config.userEmail + ' (Pengguna biasa)';
+              statusDiv.innerHTML = '👤 Login sebagai: <strong>' + config.userEmail + '</strong> (Pengguna biasa)';
               statusDiv.style.color = '#004085';
             } else {
-              statusDiv.innerHTML = '⚠️ <strong>Belum login.</strong> Silakan login ke akun Google Anda terlebih dahulu.';
+              statusDiv.innerHTML = '⚠️ Belum login. Silakan login ke akun Google Anda.';
               statusDiv.style.color = '#856404';
             }
           })
           .catch(function(error) {
-            console.error('❌ Error:', error);
-            statusDiv.innerHTML = '❌ <strong>Gagal terhubung ke server.</strong> Error: ' + error.message + '<br><small>Pastikan URL Web App sudah benar dan sudah di-deploy.</small>';
+            console.error('❌ Error detail:', error);
+            statusDiv.innerHTML = '❌ Gagal terhubung ke server.<br><small>Error: ' + error.message + '</small>';
             statusDiv.style.color = '#721c24';
           });
       }
